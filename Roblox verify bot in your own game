@@ -1,0 +1,88 @@
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import org.json.JSONObject;
+
+public class RobloxVerifierBot {
+    
+    private static final String ROBLOX_API_BASE_URL = "https://api.roblox.com";
+    private static final String ROBLOX_VERIFY_GAME_URL = ROBLOX_API_BASE_URL + "/games/%s/multiplayer/verifications";
+    private static final String DISCORD_BOT_TOKEN = "YOUR_DISCORD_BOT_TOKEN_HERE";
+    private static final String DISCORD_BOT_PREFIX = "!verify";
+    private static final String ROBLOX_GAME_ID = "YOUR_ROBLOX_GAME_ID_HERE";
+    
+    public static void main(String[] args) {
+        
+        DiscordApi api = new DiscordApiBuilder().setToken(DISCORD_BOT_TOKEN).login().join();
+        
+        api.addMessageCreateListener(event -> {
+            String messageContent = event.getMessageContent();
+            if (messageContent.startsWith(DISCORD_BOT_PREFIX)) {
+                String[] messageParts = messageContent.split(" ");
+                if (messageParts.length == 2) {
+                    String robloxUsername = messageParts[1];
+                    if (verifyUserInGame(robloxUsername)) {
+                        event.getChannel().sendMessage("Verification successful!");
+                    } else {
+                        event.getChannel().sendMessage("Verification failed. Please try again later.");
+                    }
+                }
+            }
+        });
+        
+    }
+    
+    private static boolean verifyUserInGame(String robloxUsername) {
+        
+        try {
+            URL url = new URL(String.format(ROBLOX_VERIFY_GAME_URL, ROBLOX_GAME_ID));
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("X-CSRF-TOKEN", getCSRFToken());
+            conn.setDoOutput(true);
+            
+            JSONObject requestBody = new JSONObject();
+            requestBody.put("username", robloxUsername);
+            
+            String requestBodyString = requestBody.toString();
+            conn.getOutputStream().write(requestBodyString.getBytes());
+            
+            int responseCode = conn.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                return true;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        
+        return false;
+    }
+    
+    private static String getCSRFToken() {
+        try {
+            URL url = new URL(ROBLOX_API_BASE_URL + "/csrf/v1/token");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("X-CSRF-TOKEN", "fetch");
+            
+            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            StringBuilder responseBody = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                responseBody.append(line);
+            }
+            reader.close();
+            
+            JSONObject responseBodyJson = new JSONObject(responseBody.toString());
+            return responseBodyJson.getString("token");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        
+        return "";
+    }
+    
+}
